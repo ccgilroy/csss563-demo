@@ -1,0 +1,357 @@
+---
+title: "Demo: Digital Demography and Data Science"
+author: "Connor Gilroy"
+output: 
+  html_document:
+    toc: true
+    theme: readable
+---
+
+# Goals
+
+1. To scrape data from the front end of any web page.
+2. To access data from certain online sources via structured requests.
+3. To collect social media data using a dedicated R package for Twitter.
+
+The overarching goal is to expose you to different ways of collecting digital data for demographic research.
+
+The approaches here, scaled up to collect more data over longer periods of time, are the main ones used for quantitative research projects with digital data. (The only other alternative is to persuade a company or collaborator to give you the data directly.)
+
+# References
+
+This demo draws on prior tutorials I've given, as well as courses and workshops by [Emilio Zagheni](https://github.com/ezagheni/IUSSP2017_Twitter_module), [Pablo Barberá](http://pablobarbera.com/POIR613/code/23-twitter-streaming-data-collection.html), [Rochelle Terman](https://plsc-31101.github.io/course/collecting-data-from-the-web.html
+), and [Chris Bail](https://cbail.github.io/textasdata/screenscraping/rmarkdown/Screenscraping_in_R.html).
+
+# Setup
+
+```{r include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+Load the following packages. (Install them if you don't have them.)
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse) # general R data science tools
+library(rvest) # for web scraping
+library(httr) # for general API access
+library(jsonlite) # for working with json-formatted responses
+library(rtweet) # for Twitter API access
+library(leaflet) # for maps
+```
+
+# Webscraping with `rvest`
+
+As an example, we'll scrape the UW sociology department's directory: https://soc.washington.edu/people. Our goal will be to grab the list of people in the department, and turn it into an R data frame.
+
+We can do this because web pages are written in HTML, which has a hierarchical tree structure of named elements. Each website is different, but once we figure out the structure we can extract whatever we want.
+
+Open the sociology web page in your browser. We want to view the underlying HTML---we'll need to look at it to figure out what parts of the page to extract. In Chrome, you can do this by right-clicking and selecting "Inspect."
+
+Mouse over the table on the page and find it in the html. Right-click on the `<table>` tag to copy the *CSS selector*, which is a way of uniquely identifying that element of the page. (XPath is an alternative.) We'll use that identifier to pull the table out of the page. This selector identifies the table: 
+
+`#content-inner > div > div.view-content > table`
+
+[That selector means "a table inside a div with class view-content inside another div inside  something with id content-inner."]
+
+Now, let's switch back to R. First, to download the page into R: 
+
+```{r}
+library(rvest)
+uw_soc <- read_html("https://soc.washington.edu/people")
+
+uw_soc
+
+# to see the whole html structure (it's long!):
+# html_structure(uw_soc)
+```
+
+Find the table, using the CSS selector: 
+
+```{r}
+table_selector <- "#content-inner > div > div.view-content > table"
+
+people_table_node <- html_node(uw_soc, 
+                               css = table_selector)
+
+people_table_node
+```
+
+Convert the table into a data frame: 
+
+```{r}
+people_table <- html_table(people_table_node)
+
+head(people_table)
+```
+
+Let's look at the distribution of department members by title: 
+
+```{r}
+people_table %>% 
+  count(Title) %>% 
+  arrange(desc(n))
+```
+
+**Note:** Of course, not everything online is a table. You might find structured data in other formats, and you can use selectors to pull specific fields. 
+
+**Going further with webscraping:**
+
+- Some web pages are complicated and dynamic. For these, you can use **Selenium** to interact with the web browser (to click buttons, for example). Selenium works with multiple programming languages and has an R interface, `RSelenium`. 
+- **Helena** is a tool created by Sarah Chasins, a CS researcher, to help academics scrape data more easily. Kyle Crowder has a team of current and former graduate students working on using it to scrape rental data from Craigslist. Ian Kennedy & Chris Hess are two team members. 
+
+# APIs with `httr`
+
+```{r}
+library(httr)
+library(jsonlite)
+```
+
+## http verbs and statuses
+
+HTTP is a protocol which underlies the web. You make a *request* to a particular URL and get a *response* back. 
+
+The methods for making requests are verbs: GET, POST, PUT, DELETE...
+
+A basic example: 
+
+```{r}
+r <- GET("https://http.cat/200")
+r
+```
+
+```{r}
+status_code(r)
+r_body <- content(r, as = 'raw')
+head(r_body)
+write_file(r_body, "200.jpg")
+```
+
+## paths and queries
+
+The World Bank has a database of information about different countries: https://datahelpdesk.worldbank.org/knowledgebase/topics/125589
+
+To get data from the World Bank API, we need to build a url. In addition to the base website name, this can have two trailing components: 
+
+- a path, separated with slashes (like `/path/to/resource`)
+- a query, separated with ? and & (like `?key1=value1&key2=value2`)
+
+```{r}
+# the base url (protocol + host)
+wb_url <- "http://api.worldbank.org"
+
+# the path to a particular country
+wb_path <- str_c("v2", "country", "us", sep = "/")
+
+# a query parameter telling the API what format we want
+wb_query <- list(
+  format = "json"
+)
+```
+
+```{r}
+r1 <- GET(wb_url, path = wb_path, query = wb_query)
+r1
+```
+
+```{r}
+prettify(content(r1, as = "text"))
+```
+
+We can read the [API documentation](https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation) and find out that `SP.POP.TOTL` is the indicator for a country's population. We then build a new path to access that indicator: 
+
+```{r}
+wb_path_2 <- str_c("v2", "country", "us", "indicators", "SP.POP.TOTL", sep = "/")
+
+wb_path_2
+```
+
+Make the request: 
+
+```{r}
+r2 <- GET(wb_url, path = wb_path_2, query = wb_query)
+```
+
+And look at the response: 
+
+```{r}
+r2_body <- jsonlite::fromJSON(content(r2, as = "text"))
+
+d2 <- jsonlite::flatten(r2_body[[2]])
+
+head(d2)
+```
+
+
+APIs often return a set number of results at once, a concept called *paging*. The response tells us that it returned 50 of 60 results on the first page: 
+
+```{r}
+r2_body[[1]]
+```
+
+We can get the rest by adding a query parameter `page = 2`: 
+
+```{r}
+wb_query_2 <- wb_query
+wb_query_2$page = 2
+
+# make request
+r3 <- GET(wb_url, path = wb_path_2, query = wb_query_2)
+
+# extract data frame
+d3 <- jsonlite::flatten(jsonlite::fromJSON(content(r3, as = "text"))[[2]])
+
+# combine data frames
+d_complete <- bind_rows(d2, d3)
+tail(d_complete)
+```
+
+Other general API examples: 
+
+- Yelp: https://github.com/ccgilroy/yelp-restaurants
+- the New York Times: https://github.com/ccgilroy/nyt-api-httr-demo
+
+# Twitter APIs with `rtweet`
+
+Social media APIs often have dedicated packages to make it easier to use them. `rtweet` is the most current and flexible package for the Twitter APIs. 
+
+The World Bank API let us make requests without authenticating, but most APIs require some type of **authentication**. This allows APIs to revoke access or enforce limits on access. Often there's a limit on how many requests you can make in a period of time, which is called *rate limiting*. The simplest form of authentication is an *API key*, which is essentially a password that you send with every request as a query parameter. Social media APIs typically have more complicated permissions, often based off of the *OAuth* standard. 
+
+To authenticate with `rtweet`, you will need a personal Twitter account. When you first run `stream_tweets()`, it will open a web browser to your Twitter account and ask you to authorize the rstats2twitter app. 
+
+This is much easier than creating your own developer app and obtaining an OAuth access token, which used to be the typical approach. You might still find yourself needing to do that for more complex tasks; read more about authentication in `vignette("auth", "rtweet")`.
+
+**Note:** The first time I used `rtweet`, I ran into trouble with file permissions for my `.Renviron` file. I had to change ownership of that file to ... myself. You may have similar issues to troubleshoot.
+
+Twitter's developer documentation for researchers describes some of the different endpoints, their uses, and limitations: https://developer.twitter.com/en/use-cases/academic-researchers/products-for-researchers
+
+## the streaming API
+
+Without a query, `stream_tweets()` returns a sample of real-time tweets. (There's some previous research indicating that this sample might not be truly random, though that may have changed.)
+
+```{r}
+library(rtweet)
+
+streamed_tweets <- stream_tweets(
+  q = "",
+  timeout = 20, 
+  parse = TRUE,
+  file_name = "rtweet_stream.json"
+)
+
+```
+
+You can filter by topic, which delivers complete data rather than a sample (up to a 1% cap). 
+
+```{r}
+streamed_tweets_filter <- stream_tweets(
+  q = "statistics",
+  timeout = 30, 
+  parse = TRUE,
+  file_name = "rtweet_stream_filter.json"
+)
+```
+
+For social science research purposes, often the most useful tweets are ones that are geolocated. (This is a small minority of tweets.) If you supply a geography, you'll get geolocated tweets: 
+
+```{r}
+streamed_tweets_geo <- stream_tweets(
+  q = lookup_coords("usa"), 
+  timeout = 5,
+  parse = TRUE,
+  file_name = "rtweet_stream_geo.json", 
+)
+```
+
+Extract coordinates with `lat_lng()`, and then plot them using the `leaflet` package: 
+
+```{r}
+lat_lng(streamed_tweets_geo) %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircles(popup = ~text)
+```
+
+(See this older tutorial for more on mapping: https://github.com/ccgilroy/mapping-twitter-data)
+
+You can also supply coordinates manually using a *bounding box*: 
+
+```{r eval=FALSE}
+# Note: this code isn't run
+
+# a bounding box for Washington state
+wa <- c(-124.8361, 45.5437, -116.9174, 49.0024)
+
+streamed_tweets_wa <- stream_tweets(
+  wa, 
+  timeout = 60,
+  parse = TRUE,
+  file_name = "rtweet_stream_wa.json", 
+)
+```
+
+## the search API
+
+`search_tweets()` finds tweets from the past ~7 days: 
+
+```{r}
+searched_tweets <- search_tweets(
+  q = "seattle", 
+  n = 1000,
+  geocode = lookup_coords("usa")
+)
+
+ts_plot(searched_tweets, by = "min")
+```
+
+## Alternative Twitter package - `streamR`
+
+There's a slightly older package for accessing the Twitter Streaming API called `streamR`, written by Pablo Barberá. If `rtweets` doesn't work out for some of you, we'll have a look at this code as an alternative.
+
+For `streamR`, you will need a developer account, developer app, and access token. See here for a bit more on how to do that:
+
+http://pablobarbera.com/POIR613/code/23-twitter-streaming-data-collection.html#authenticating
+
+You need to keep your access token secret. Mine's just in a separate file---even better would be to save it as an object in your global environment. 
+
+```{r message=FALSE, warning=FALSE}
+library(ROAuth)
+library(streamR)
+
+my_oauth <- yaml::yaml.load_file("twitter_auth.yml")
+names(my_oauth)
+```
+
+```{r eval=FALSE}
+# filter by keyword
+filterStream(file.name = "streamr.json", 
+             track = "#rstats", 
+             oauth = my_oauth, timeout = 20)
+
+tweets <- parseTweets("streamr.json")
+head(tweets)
+```
+
+```{r eval=FALSE}
+# filter by geography
+# Washington state bounding box
+wa <- c(-124.8361, 45.5437, -116.9174, 49.0024)
+
+filterStream(file.name = "streamr_wa.json", 
+             locations = wa, 
+             timeout = 60,
+             oauth = my_oauth)
+
+tweets_wa <- parseTweets("streamr_wa.json")
+tweets_wa <- as_tibble(tweets_wa)
+```
+
+```{r eval=FALSE}
+# map tweets with the leaflet package
+library(leaflet)
+tweets_wa %>%
+  select(lat, lon, text) %>%
+  na.omit() %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(popup = ~text)
+```
