@@ -7,6 +7,8 @@ output:
     theme: readable
 ---
 
+Copyright (c) 2020 Connor Gilroy. MIT Licensed. Full license terms [here](https://github.com/ccgilroy/csss563-demo/blob/master/LICENSE).
+
 # Goals
 
 1. To scrape data from the front end of any web page.
@@ -46,6 +48,8 @@ As an example, we'll scrape the UW sociology department's directory: https://soc
 We can do this because web pages are written in HTML, which has a hierarchical tree structure of named elements. Each website is different, but once we figure out the structure we can extract whatever we want.
 
 Open the sociology web page in your browser. We want to view the underlying HTML---we'll need to look at it to figure out what parts of the page to extract. In Chrome, you can do this by right-clicking and selecting "Inspect."
+
+#content-inner > div > div.view-content > table
 
 Mouse over the table on the page and find it in the html. Right-click on the `<table>` tag to copy the *CSS selector*, which is a way of uniquely identifying that element of the page. (XPath is an alternative.) We'll use that identifier to pull the table out of the page. This selector identifies the table: 
 
@@ -115,7 +119,7 @@ The methods for making requests are verbs: GET, POST, PUT, DELETE...
 A basic example: 
 
 ```{r}
-r <- GET("https://http.cat/200")
+r <- GET("https://http.cat/404")
 r
 ```
 
@@ -123,7 +127,7 @@ r
 status_code(r)
 r_body <- content(r, as = 'raw')
 head(r_body)
-write_file(r_body, "200.jpg")
+write_file(r_body, "404.jpg")
 ```
 
 ## paths and queries
@@ -140,7 +144,7 @@ To get data from the World Bank API, we need to build a url. In addition to the 
 wb_url <- "http://api.worldbank.org"
 
 # the path to a particular country
-wb_path <- str_c("v2", "country", "us", sep = "/")
+wb_path <- str_c("v2", "country", "ca", sep = "/")
 
 # a query parameter telling the API what format we want
 wb_query <- list(
@@ -160,7 +164,7 @@ prettify(content(r1, as = "text"))
 We can read the [API documentation](https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation) and find out that `SP.POP.TOTL` is the indicator for a country's population. We then build a new path to access that indicator: 
 
 ```{r}
-wb_path_2 <- str_c("v2", "country", "us", "indicators", "SP.POP.TOTL", sep = "/")
+wb_path_2 <- str_c("v2", "country", "ca", "indicators", "SP.POP.TOTL", sep = "/")
 
 wb_path_2
 ```
@@ -233,11 +237,12 @@ library(rtweet)
 
 streamed_tweets <- stream_tweets(
   q = "",
-  timeout = 20, 
+  timeout = 10, 
   parse = TRUE,
   file_name = "rtweet_stream.json"
 )
 
+streamed_tweets
 ```
 
 You can filter by topic, which delivers complete data rather than a sample (up to a 1% cap). 
@@ -295,17 +300,17 @@ streamed_tweets_wa <- stream_tweets(
 
 ```{r}
 searched_tweets <- search_tweets(
-  q = "seattle", 
+  q = "demography", 
   n = 1000,
   geocode = lookup_coords("usa")
 )
 
-ts_plot(searched_tweets, by = "min")
+ts_plot(searched_tweets, by = "hour")
 ```
 
 ## Alternative Twitter package - `streamR`
 
-There's a slightly older package for accessing the Twitter Streaming API called `streamR`, written by Pablo Barberá. If `rtweets` doesn't work out for some of you, we'll have a look at this code as an alternative.
+There's a slightly older package for accessing the Twitter Streaming API called `streamR`, written by Pablo Barberá. If `rtweet` doesn't work out for some of you, we'll have a look at this code as an alternative.
 
 For `streamR`, you will need a developer account, developer app, and access token. See here for a bit more on how to do that:
 

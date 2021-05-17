@@ -4314,6 +4314,7 @@ summary {
 </ul>
 </div>
 
+<p>Copyright (c) 2020 Connor Gilroy. MIT Licensed. Full license terms <a href="https://github.com/ccgilroy/csss563-demo/blob/master/LICENSE">here</a>.</p>
 <div id="goals" class="section level1">
 <h1>Goals</h1>
 <ol style="list-style-type: decimal">
@@ -4343,6 +4344,7 @@ library(leaflet) # for maps</code></pre>
 <p>As an example, we’ll scrape the UW sociology department’s directory: <a href="https://soc.washington.edu/people" class="uri">https://soc.washington.edu/people</a>. Our goal will be to grab the list of people in the department, and turn it into an R data frame.</p>
 <p>We can do this because web pages are written in HTML, which has a hierarchical tree structure of named elements. Each website is different, but once we figure out the structure we can extract whatever we want.</p>
 <p>Open the sociology web page in your browser. We want to view the underlying HTML—we’ll need to look at it to figure out what parts of the page to extract. In Chrome, you can do this by right-clicking and selecting “Inspect.”</p>
+<p>#content-inner &gt; div &gt; div.view-content &gt; table</p>
 <p>Mouse over the table on the page and find it in the html. Right-click on the <code>&lt;table&gt;</code> tag to copy the <em>CSS selector</em>, which is a way of uniquely identifying that element of the page. (XPath is an alternative.) We’ll use that identifier to pull the table out of the page. This selector identifies the table:</p>
 <p><code>#content-inner &gt; div &gt; div.view-content &gt; table</code></p>
 <p>[That selector means “a table inside a div with class view-content inside another div inside something with id content-inner.”]</p>
