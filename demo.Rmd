@@ -7,7 +7,7 @@ output:
     theme: readable
 ---
 
-Copyright (c) 2020 Connor Gilroy. MIT Licensed. Full license terms [here](https://github.com/ccgilroy/csss563-demo/blob/master/LICENSE).
+Copyright (c) 2021 Connor Gilroy. MIT Licensed. Full license terms [here](https://github.com/ccgilroy/csss563-demo/blob/master/LICENSE).
 
 # Goals
 
@@ -22,7 +22,7 @@ The approaches here, scaled up to collect more data over longer periods of time,
 # References
 
 This demo draws on prior tutorials I've given, as well as courses and workshops by [Emilio Zagheni](https://github.com/ezagheni/IUSSP2017_Twitter_module), [Pablo Barberá](http://pablobarbera.com/POIR613/code/23-twitter-streaming-data-collection.html), [Rochelle Terman](https://plsc-31101.github.io/course/collecting-data-from-the-web.html
-), and [Chris Bail](https://cbail.github.io/textasdata/screenscraping/rmarkdown/Screenscraping_in_R.html).
+), [Chris Bail](https://cbail.github.io/textasdata/screenscraping/rmarkdown/Screenscraping_in_R.html), and [Monica Alexander](https://mjalexander.github.io/social_media_workshop/).
 
 # Setup
 
@@ -119,7 +119,7 @@ The methods for making requests are verbs: GET, POST, PUT, DELETE...
 A basic example: 
 
 ```{r}
-r <- GET("https://http.cat/404")
+r <- GET("https://http.cat/200")
 r
 ```
 
@@ -127,7 +127,7 @@ r
 status_code(r)
 r_body <- content(r, as = 'raw')
 head(r_body)
-write_file(r_body, "404.jpg")
+write_file(r_body, "200.jpg")
 ```
 
 ## paths and queries
@@ -144,7 +144,7 @@ To get data from the World Bank API, we need to build a url. In addition to the 
 wb_url <- "http://api.worldbank.org"
 
 # the path to a particular country
-wb_path <- str_c("v2", "country", "ca", sep = "/")
+wb_path <- str_c("v2", "country", "us", sep = "/")
 
 # a query parameter telling the API what format we want
 wb_query <- list(
@@ -164,7 +164,7 @@ prettify(content(r1, as = "text"))
 We can read the [API documentation](https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation) and find out that `SP.POP.TOTL` is the indicator for a country's population. We then build a new path to access that indicator: 
 
 ```{r}
-wb_path_2 <- str_c("v2", "country", "ca", "indicators", "SP.POP.TOTL", sep = "/")
+wb_path_2 <- str_c("v2", "country", "us", "indicators", "SP.POP.TOTL", sep = "/")
 
 wb_path_2
 ```
@@ -318,7 +318,7 @@ http://pablobarbera.com/POIR613/code/23-twitter-streaming-data-collection.html#a
 
 You need to keep your access token secret. Mine's just in a separate file---even better would be to save it as an object in your global environment. 
 
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, eval=FALSE}
 library(ROAuth)
 library(streamR)
 
