@@ -32,13 +32,15 @@ knitr::opts_chunk$set(cache = TRUE)
 
 Load the following packages. (Install them if you don't have them.)
 
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, cache=FALSE}
 library(tidyverse) # general R data science tools
 library(rvest) # for web scraping
 library(httr) # for general API access
 library(jsonlite) # for working with json-formatted responses
 library(rtweet) # for Twitter API access
 library(leaflet) # for maps
+library(tidygeocoder) # for geocoding (bounding boxes)
+library(tigris) # for geocoding (Census GEOIDs)
 ```
 
 # Webscraping with `rvest`
@@ -51,6 +53,8 @@ Open the sociology web page in your browser. We want to view the underlying HTML
 
 #content-inner > div > div.view-content > table
 
+#content-inner > div > div.view-content > table
+
 Mouse over the table on the page and find it in the html. Right-click on the `<table>` tag to copy the *CSS selector*, which is a way of uniquely identifying that element of the page. (XPath is an alternative.) We'll use that identifier to pull the table out of the page. This selector identifies the table: 
 
 `#content-inner > div > div.view-content > table`
@@ -59,7 +63,7 @@ Mouse over the table on the page and find it in the html. Right-click on the `<t
 
 Now, let's switch back to R. First, to download the page into R: 
 
-```{r}
+```{r cache=FALSE}
 library(rvest)
 uw_soc <- read_html("https://soc.washington.edu/people")
 
@@ -71,7 +75,7 @@ uw_soc
 
 Find the table, using the CSS selector: 
 
-```{r}
+```{r cache=FALSE}
 table_selector <- "#content-inner > div > div.view-content > table"
 
 people_table_node <- html_node(uw_soc, 
@@ -82,10 +86,16 @@ people_table_node
 
 Convert the table into a data frame: 
 
-```{r}
+```{r cache=FALSE}
 people_table <- html_table(people_table_node)
 
-head(people_table)
+people_table <- as_tibble(people_table)
+
+names(people_table)
+```
+
+```{r}
+nrow(people_table)
 ```
 
 Let's look at the distribution of department members by title: 
@@ -119,7 +129,7 @@ The methods for making requests are verbs: GET, POST, PUT, DELETE...
 A basic example: 
 
 ```{r}
-r <- GET("https://http.cat/200")
+r <- GET("https://http.cat/404")
 r
 ```
 
@@ -127,7 +137,7 @@ r
 status_code(r)
 r_body <- content(r, as = 'raw')
 head(r_body)
-write_file(r_body, "200.jpg")
+write_file(r_body, "404.jpg")
 ```
 
 ## paths and queries
@@ -155,6 +165,8 @@ wb_query <- list(
 ```{r}
 r1 <- GET(wb_url, path = wb_path, query = wb_query)
 r1
+
+r1_v2 <- GET("http://api.worldbank.org/v2/country/us?format=json")
 ```
 
 ```{r}
@@ -176,6 +188,11 @@ r2 <- GET(wb_url, path = wb_path_2, query = wb_query)
 ```
 
 And look at the response: 
+
+```{r eval=FALSE}
+prettify(content(r2, as = "text"))
+```
+
 
 ```{r}
 r2_body <- jsonlite::fromJSON(content(r2, as = "text"))
@@ -242,7 +259,11 @@ streamed_tweets <- stream_tweets(
   file_name = "rtweet_stream.json"
 )
 
-streamed_tweets
+names(streamed_tweets)
+
+streamed_tweets %>% 
+  count(lang) %>%
+  arrange(desc(n))
 ```
 
 You can filter by topic, which delivers complete data rather than a sample (up to a 1% cap). 
@@ -255,6 +276,8 @@ streamed_tweets_filter <- stream_tweets(
   file_name = "rtweet_stream_filter.json"
 )
 ```
+
+### geolocated tweets
 
 For social science research purposes, often the most useful tweets are ones that are geolocated. (This is a small minority of tweets.) If you supply a geography, you'll get geolocated tweets: 
 
@@ -283,15 +306,61 @@ You can also supply coordinates manually using a *bounding box*:
 ```{r eval=FALSE}
 # Note: this code isn't run
 
-# a bounding box for Washington state
+# a bounding box for Washington state (looked up online)
+# order is left, bottom, right, top
+# same order as lookup_coords()
 wa <- c(-124.8361, 45.5437, -116.9174, 49.0024)
 
 streamed_tweets_wa <- stream_tweets(
-  wa, 
-  timeout = 60,
+  q = wa, 
+  timeout = 10,
   parse = TRUE,
   file_name = "rtweet_stream_wa.json", 
 )
+```
+
+Some bounding boxes are built into rtweet:
+
+```{r}
+lookup_coords("seattle us")
+```
+
+Others require a Google Maps API key. 
+
+Instead of `lookup_coords()`, you can use `tidygeocoder::geo()` to get bounding box information from OpenStreetMaps through the Nominatim API. This returns coordinates in a different order and format, so they need to be rearranged to work with `stream_tweets()`.
+
+```{r}
+# geocoding data for Washington state from Nominatim / OSM
+wa2 <- geo(address = "Washington State", full_results = TRUE)
+
+# order is bottom, top, left, right
+wa2$boundingbox[[1]]
+# so rearrange using indices (and convert from character to numeric)
+wa2_bb <- as.numeric(wa2$boundingbox[[1]][c(3, 1, 4, 2)])
+wa2_bb
+```
+
+```{r eval=FALSE}
+# again, not run
+streamed_tweets_wa <- stream_tweets(
+  q = wa2_bb, 
+  timeout = 10,
+  parse = TRUE,
+  file_name = "rtweet_stream_wa.json", 
+)
+```
+
+### geocoding to Census geographies
+
+As of May 2021, you need tigris version 1.4 to geocode latitudes and longitudes to Census geographies using the Bureau's geocoding API. (https://geocoding.geo.census.gov/)
+
+```{r}
+lat_lng(streamed_tweets_geo) %>%
+  head(5) %>%
+  select(user_id, status_id, text, lat, lon = lng) %>%
+  append_geoid(geoid_type = "county") %>%
+  select(lat, lon, geoid)
+
 ```
 
 ## the search API
@@ -306,6 +375,63 @@ searched_tweets <- search_tweets(
 )
 
 ts_plot(searched_tweets, by = "hour")
+```
+
+## Friends and followers
+
+The Twitter API also allows collecting data on users rather than tweets. You can use this to build a network of friends and followers. In this case, I've created a list of accounts for 7 UW Sociology professors — you could imagine constructing a full list based on the data we webscraped in the very first activity. Which of these accounts follow *each other*?
+
+```{r}
+accounts <- read_lines("accounts.txt")
+
+accounts_info <- lookup_users(accounts)
+
+names(users_data(accounts_info))
+```
+
+`get_friends()` retrieves who they follow:
+
+```{r}
+d_friends <- 
+  accounts_info %>%
+  select(user_id, screen_name, name) %>%
+  mutate(friends = map(user_id, get_friends))
+```
+
+Filter down to just those 7 accounts:
+
+```{r}
+d_edges <- 
+  d_friends %>%
+  select(-user_id) %>%
+  unnest(cols = c(friends)) %>%
+  select(from = user, to = user_id) %>%
+  filter(to %in% accounts_info$user_id)
+```
+
+tidygraph builds a network object from node and edge data frames:
+
+```{r}
+library(tidygraph)
+
+g <- tbl_graph(nodes = users_data(accounts_info), 
+               edges = d_edges, 
+               node_key = "user_id")
+```
+
+ggraph plots the network:
+
+```{r}
+library(ggraph)
+
+ggraph(g, layout = "circle") +
+  geom_edge_link(color = "gray", alpha = .5) + 
+  geom_node_point(color = "black") +
+  # censoring user names; uncomment and re-run to see
+  # geom_node_text(aes(label = screen_name)) + 
+  coord_equal() + 
+  xlim(-1.5, 1.5) + 
+  theme_graph() 
 ```
 
 ## Alternative Twitter package - `streamR`
